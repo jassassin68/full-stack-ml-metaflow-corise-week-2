@@ -6,7 +6,12 @@ from metaflow.cards import Table, Markdown, Artifact, Image
 import numpy as np 
 from dataclasses import dataclass
 
-labeling_function = ... # TODO: Define your labeling function here.
+def labeling_function(row):
+    if row['rating'] > 4:
+        label = 1
+    else:
+        label = 0
+    return label
 
 @dataclass
 class ModelResult:
