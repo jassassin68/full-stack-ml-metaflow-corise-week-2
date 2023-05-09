@@ -28,7 +28,7 @@ class NbowModel():
             15, activation="relu",
             kernel_regularizer=regularizers.L1L2(l1=1e-5, l2=1e-4)
         )(x)
-        predictions = layers.Dense(1, activation="softmax",)(x)
+        predictions = layers.Dense(1, activation="sigmoid",)(x)
         self.model = tf.keras.Model(inputs, predictions)
         opt = optimizers.Adam(learning_rate=0.002)
         self.model.compile(loss="binary_crossentropy", 
