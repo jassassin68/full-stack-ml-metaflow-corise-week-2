@@ -6,12 +6,7 @@ from metaflow.cards import Table, Markdown, Artifact, Image
 import numpy as np 
 from dataclasses import dataclass
 
-def labeling_function(row):
-    if row['rating'] > 4:
-        label = 1
-    else:
-        label = 0
-    return label
+labeling_function = lambda row: 1 if row['rating'] >= 5 else 0 
 
 @dataclass
 class ModelResult:
@@ -25,7 +20,7 @@ class ModelResult:
 class BaselineChallenge(FlowSpec):
 
     split_size = Parameter('split-sz', default=0.2)
-    data = IncludeFile('data', default='Womens Clothing E-Commerce Reviews.csv')
+    data = IncludeFile('data', default='../data/Womens Clothing E-Commerce Reviews.csv')
     kfold = Parameter('k', default=5)
     scoring = Parameter('scoring', default='accuracy')
 
@@ -38,8 +33,8 @@ class BaselineChallenge(FlowSpec):
         
         # load dataset packaged with the flow.
         # this technique is convenient when working with small datasets that need to move to remove tasks.
-        df = pd.read_csv(io.StringIO(self.data)) 
         # TODO: load the data. 
+        df = pd.read_csv(io.StringIO(self.data))
         # Look up a few lines to the IncludeFile('data', default='Womens Clothing E-Commerce Reviews.csv'). 
         # You can find documentation on IncludeFile here: https://docs.metaflow.org/scaling/data#data-in-local-files
 
@@ -70,19 +65,12 @@ class BaselineChallenge(FlowSpec):
         params = "Always predict 1"
         pathspec = f"{current.flow_name}/{current.run_id}/{current.step_name}/{current.task_id}"
 
-        from sklearn.dummy import DummyClassifier
+        predictions = np.ones(len(self.valdf)).astype('int') # TODO: predict the majority class
         
-        dummy_clf = DummyClassifier(strategy="most_frequent")
-        X_train, y_train = self.traindf['review'], self.traindf['label']
-        X_val, y_val = self.valdf['review'], self.valdf['label']
-        dummy_clf.fit(X_train, y_train)
-
-        predictions = dummy_clf.predict(X_val) # TODO: predict the majority class
-        scores = dummy_clf.predict_proba(X_val)
+        acc = accuracy_score(self.valdf['label'], predictions) # TODO: return the accuracy_score of these predictions
+        rocauc = roc_auc_score(self.valdf['label'], predictions) # TODO: return the roc_auc_score of these predictions
         
-        acc = accuracy_score(y_val, predictions) # TODO: return the accuracy_score of these predictions
-        rocauc = roc_auc_score(y_val, scores[:, 1]) # TODO: return the roc_auc_score of these predictions
-        
+        # print(f"model: {self._name}, acc: {acc:.3f}, rocauc: {rocauc:.3f}")
         self.result = ModelResult("Baseline", params, pathspec, acc, rocauc)
         self.next(self.aggregate)
 
@@ -101,10 +89,10 @@ class BaselineChallenge(FlowSpec):
 
         self.results = []
         for params in self.hyperparam_set:
-            model = NbowModel(**params) # TODO: instantiate your custom model here!
-            model.fit(X=self.df['review'], y=self.df['label'])
-            acc = model.eval_acc(self.valdf['review'], self.valdf['label']) # TODO: evaluate your custom model in an equivalent way to accuracy_score.
-            rocauc = model.eval_rocauc(self.valdf['review'], self.valdf['label']) # TODO: evaluate your custom model in an equivalent way to roc_auc_score.
+            model = NbowModel(params['vocab_sz']) # TODO: instantiate your custom model here!
+            model.fit(X=self.traindf['review'], y=self.traindf['label'])
+            acc = model.eval_acc(X=self.valdf['review'], labels=self.valdf['label']) # TODO: evaluate your custom model in an equivalent way to accuracy_score.
+            rocauc = model.eval_rocauc(X=self.valdf['review'], labels=self.valdf['label']) # TODO: evaluate your custom model in an equivalent way to roc_auc_score.
             self.results.append(ModelResult(f"NbowModel - vocab_sz: {params['vocab_sz']}", params, pathspec, acc, rocauc))
 
         self.next(self.aggregate)
@@ -120,6 +108,7 @@ class BaselineChallenge(FlowSpec):
         ])
         df['name'].append(result.name)
         df['accuracy'].append(result.acc)
+        df['rocauc'].append(result.rocauc)
         return rows, df
 
     @card(type="corise") # TODO: Set your card type to "corise". 
@@ -135,7 +124,7 @@ class BaselineChallenge(FlowSpec):
         rcParams.update({'figure.autolayout': True})
 
         rows = []
-        violin_plot_df = {'name': [], 'accuracy': []}
+        violin_plot_df = {'name': [], 'accuracy': [], 'rocauc': []}
         for task in inputs:
             if task._name == "model": 
                 for result in task.results:
@@ -159,11 +148,23 @@ class BaselineChallenge(FlowSpec):
         
         fig, ax = plt.subplots(1,1)
         plt.xticks(rotation=40)
+        ax.set_title('Accuracy of baseline and trained models')
+        ax.set_ylabel('Model')
+        ax.set_xlabel('Accuracy')      
         sns.violinplot(data=violin_plot_df, x="name", y="accuracy", ax=ax)
         
         # TODO: Append the matplotlib fig to the card
         # Docs: https://docs.metaflow.org/metaflow/visualizing-results/easy-custom-reports-with-card-components#showing-plots
         current.card.append(Image.from_matplotlib(fig))
+
+        # Add rocauc plot too
+        fig2, ax2 = plt.subplots(1, 1)
+        ax2.set_title('ROCAUC of baseline and trained models')
+        ax2.set_ylabel('Model')
+        ax2.set_xlabel('ROCAUC')
+        sns.barplot(data=violin_plot_df, x='rocauc', y='name', ax=ax2)
+        current.card.append(Image.from_matplotlib(fig2))
+
 
         self.next(self.end)
 

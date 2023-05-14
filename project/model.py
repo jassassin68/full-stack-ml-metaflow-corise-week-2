@@ -35,15 +35,15 @@ class NbowModel():
                            optimizer=opt, metrics=["accuracy"])
 
     def fit(self, X, y):
-        print(X.shape)
-        print(X[0])
+        print("fit: type of X:", type(X))
+        print("fit: shape:", X.shape)
         res = self.cv.fit_transform(X).toarray()
         self.model.fit(x=res, y=y, batch_size=32, 
                        epochs=10, validation_split=.2)
     
     def predict(self, X):
-        print(X.shape)
-        print(X[0])
+        print("pred: type of X:", type(X))
+        print("pred: shape:", X.shape)
         res = self.cv.transform(X).toarray()
         return self.model.predict(res)
     
